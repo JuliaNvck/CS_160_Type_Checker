@@ -19,11 +19,16 @@ std::unique_ptr<FunCall> buildFunCall(const nlohmann::json& j);
 
 std::string FnType::toString() const {
     std::stringstream ss;
-    ss << "fn(<";
+    // ss << "fn(<";
+    // for (size_t i = 0; i < paramTypes.size(); ++i) {
+    //     ss << paramTypes[i]->toString() << (i == paramTypes.size() - 1 ? "" : ",");
+    // }
+    // ss << ">, " << returnType->toString() << ")";
+    ss << "(";
     for (size_t i = 0; i < paramTypes.size(); ++i) {
         ss << paramTypes[i]->toString() << (i == paramTypes.size() - 1 ? "" : ",");
     }
-    ss << ">, " << returnType->toString() << ")";
+    ss << ")";
     return ss.str();
 }
 
@@ -567,10 +572,10 @@ bool Assign::check(const Gamma& gamma, const Delta& delta, const std::shared_ptr
     if (dynamic_cast<StructType*>(lhsType.get()) || dynamic_cast<FnType*>(lhsType.get()) || dynamic_cast<NilType*>(lhsType.get())) {
         throw TypeError("invalid type " + lhsType->toString() + " for left-hand side of assignment '" + place->toString() + " = " + exp->toString() + "'");
     }
-    // Check for invalid types on RHS (struct/fn/nil) according to rule image
-    if (dynamic_cast<StructType*>(rhsType.get()) || dynamic_cast<FnType*>(rhsType.get()) || dynamic_cast<NilType*>(rhsType.get())) {
-        throw TypeError("invalid type " + rhsType->toString() + " for right-hand side of assignment '" + place->toString() + " = " + exp->toString() + "'");
-    }
+    // // Check for invalid types on RHS (struct/fn/nil) according to rule image
+    // if (dynamic_cast<StructType*>(rhsType.get()) || dynamic_cast<FnType*>(rhsType.get()) || dynamic_cast<NilType*>(rhsType.get())) {
+    //     throw TypeError("invalid type " + rhsType->toString() + " for right-hand side of assignment '" + place->toString() + " = " + exp->toString() + "'");
+    // }
 
     if (!typeEq(lhsType, rhsType)) {
          throw TypeError("incompatible types " + lhsType->toString() + " vs " + rhsType->toString() + " for assignment '" + place->toString() + " = " + exp->toString() + "'");
@@ -893,16 +898,24 @@ std::unique_ptr<Exp> buildExp(const nlohmann::json& j) {
          }
         return std::make_unique<Select>(buildExp(value.at("guard")), buildExp(value.at("tt")), buildExp(value.at("ff")));
     }
-    if (key == "UnOp") { // {"UnOp": {"op": "Neg"|"Not", "exp": Exp}}
-        if (!value.is_object() || !value.contains("op") || !value.contains("exp")) {
-             throw std::runtime_error("Invalid JSON for UnOp content");
+    if (key == "UnOp") { // {"UnOp": [ "Neg"|"Not", Exp ]} <-- Corrected expectation
+        // Check if the value is an array of size 2
+        if (!value.is_array() || value.size() != 2) {
+             throw std::runtime_error("Invalid JSON for UnOp content: Expected 2-element array [op, exp]");
         }
+        // Check if the first element is a string (the operator)
+        if (!value[0].is_string()) {
+             throw std::runtime_error("Invalid JSON for UnOp content: Operator name must be a string");
+        }
+
          UnaryOp op;
-         std::string opStr = value.at("op").get<std::string>();
+         std::string opStr = value[0].get<std::string>(); // Get operator from array[0]
          if(opStr == "Neg") op = UnaryOp::Neg;
          else if(opStr == "Not") op = UnaryOp::Not;
          else throw std::runtime_error("Unknown unary operator: " + opStr);
-         return std::make_unique<UnOp>(op, buildExp(value.at("exp")));
+
+         // Build the expression from array[1]
+         return std::make_unique<UnOp>(op, buildExp(value[1]));
     }
     if (key == "BinOp") { // {"BinOp": {"op": "Add"|..., "left": Exp, "right": Exp}}
         if (!value.is_object() || !value.contains("op") || !value.contains("left") || !value.contains("right")) {
@@ -954,69 +967,83 @@ std::unique_ptr<FunCall> buildFunCall(const nlohmann::json& j) {
 
 // Parses Statement representations from JSON.
 std::unique_ptr<Stmt> buildStmt(const nlohmann::json& j) {
-    if (!j.is_object() || j.empty()) {
-        throw std::runtime_error("Invalid JSON for Stmt: Must be non-empty object");
+    // 1. Handle Array Case: If j is an array, create a Stmts node.
+    if (j.is_array()) {
+        auto stmtsNode = std::make_unique<Stmts>();
+        for (const auto& element : j) {
+            stmtsNode->statements.push_back(buildStmt(element));
+        }
+        return stmtsNode;
     }
+
+    // 2. Handle Simple String Case: Check for "Break" or "Continue".
+    if (j.is_string()) {
+        const std::string& kind = j.get<std::string>();
+        if (kind == "Break") {
+            return std::make_unique<Break>();
+        }
+        if (kind == "Continue") {
+            return std::make_unique<Continue>();
+        }
+        // Add other simple string statements if they exist (unlikely for Cflat)
+        throw std::runtime_error("Unknown simple string statement: " + kind);
+    }
+
+    // 3. Handle Object Case: Expect a non-empty object for other statements.
+    if (!j.is_object() || j.empty()) {
+        throw std::runtime_error("Invalid JSON for Stmt: Expected non-empty object, array, or specific string (Break/Continue), got: " + j.dump());
+    }
+
+    // 4. Extract key (kind) and value for the single statement object.
     const auto& key = j.begin().key();
     const auto& value = j.begin().value();
 
+    // 5. Build specific statement types based on the key (keep existing cases).
     if (key == "Assign") { // {"Assign": [Place, Exp]}
         if (!value.is_array() || value.size() != 2) {
-             throw std::runtime_error("Invalid JSON for Assign content");
+             throw std::runtime_error("Invalid JSON for Assign content: Expected [Place, Exp]");
         }
         return std::make_unique<Assign>(buildPlace(value[0]), buildExp(value[1]));
     }
-    if (key == "Call") { // {"Call": FunCall} - Assuming 'Call' implies CallStmt
+    if (key == "Call") { // {"Call": FunCall}
          return std::make_unique<CallStmt>(buildFunCall(value));
     }
-     if (key == "If") { // {"If": {"guard": Exp, "tt": Stmt, "ff": Stmt|null}}
+     if (key == "If") { // {"If": {"guard": Exp, "tt": StmtArray, "ff": StmtArray|null}}
         if (!value.is_object() || !value.contains("guard") || !value.contains("tt")) {
-             throw std::runtime_error("Invalid JSON for If content");
+             throw std::runtime_error("Invalid JSON for If content: Missing guard or tt");
         }
         std::optional<std::unique_ptr<Stmt>> ff = std::nullopt;
-        // Use .value("key", default) for optional field
-        nlohmann::json ff_json = value.value("ff", nlohmann::json()); // Get "ff" or empty object
-        if (!ff_json.is_null() && !(ff_json.is_object() && ff_json.empty())) { // Check if it's not null/empty
+        nlohmann::json ff_json = value.value("ff", nlohmann::json());
+        // Check ff is not an empty array `[]` which might represent no else branch
+        if (!ff_json.is_null() && !(ff_json.is_array() && ff_json.empty())) {
              ff = buildStmt(ff_json);
         }
         return std::make_unique<If>(buildExp(value.at("guard")), buildStmt(value.at("tt")), std::move(ff));
     }
-     if (key == "While") { // {"While": {"guard": Exp, "body": Stmt}}
-         if (!value.is_object() || !value.contains("guard") || !value.contains("body")) {
-             throw std::runtime_error("Invalid JSON for While content");
+     if (key == "While") { // {"While": [GuardExp, BodyStmtArray]}
+         if (!value.is_array() || value.size() != 2) {
+             throw std::runtime_error("Invalid JSON for While content: Expected [GuardExp, BodyStmtArray]");
          }
-        return std::make_unique<While>(buildExp(value.at("guard")), buildStmt(value.at("body")));
+        return std::make_unique<While>(buildExp(value[0]), buildStmt(value[1]));
     }
     if (key == "Return") { // {"Return": Exp | null}
          std::optional<std::unique_ptr<Exp>> exp = std::nullopt;
-         if (!value.is_null()) { // Handle optional return expression
+         if (!value.is_null()) {
              exp = buildExp(value);
          }
         return std::make_unique<Return>(std::move(exp));
     }
-    if (key == "Break") { // {"Break": null}
-        return std::make_unique<Break>();
-    }
-    if (key == "Continue") { // {"Continue": null}
-        return std::make_unique<Continue>();
-    }
-    // Handle Stmts node explicitly if it can appear nested (e.g., in If/While without Stmts wrapper)
-    // This depends on how the JSON is generated. If If/While bodies are *always* arrays of statements,
-    // we need to wrap them in a Stmts node here. Assuming for now buildStmt is called on the outer object.
-    // If the JSON for If/While looks like {"If": {..., "tt": [Stmt, Stmt]}}, then buildStmt needs adjustment.
-    // **Correction based on If/While AST definition:** Your AST expects unique_ptr<Stmt>, so the build
-    // function *should* build a Stmts node if the JSON gives an array.
-     if (key == "Stmts") { // Handle explicit Stmts node {"Stmts": [Stmt, ...]}
-         auto node = std::make_unique<Stmts>();
-         if (!value.is_array()) throw std::runtime_error("Invalid JSON for Stmts content");
+    // Handle explicit Stmts node
+    if (key == "Stmts") { // {"Stmts": [Stmt, ...]}
+         if (!value.is_array()) throw std::runtime_error("Invalid JSON for nested Stmts content");
+         auto stmtsNode = std::make_unique<Stmts>();
          for(const auto& s : value) {
-             node->statements.push_back(buildStmt(s));
+             stmtsNode->statements.push_back(buildStmt(s));
          }
-         return node;
+         return stmtsNode;
      }
 
-
-    throw std::runtime_error("Unknown statement kind: " + key);
+    throw std::runtime_error("Unknown statement kind object: " + key);
 }
 
 // Parses Decl representations (used in params, locals, fields) from JSON.

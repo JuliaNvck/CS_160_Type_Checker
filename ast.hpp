@@ -71,7 +71,7 @@ struct NilType : Type {
 struct StructType : Type {
     std::string name;
     StructType(std::string n) : name(std::move(n)) {}
-    std::string toString() const override { return "struct(" + name + ")"; }
+    std::string toString() const override { return name ; }
     bool equals(const Type& other) const override;
     // bool equals(const Type& other) const override {
     //     // nil is not eq to struct types
@@ -88,7 +88,7 @@ struct StructType : Type {
 struct ArrayType : Type {
     std::shared_ptr<Type> elementType;
     ArrayType(std::shared_ptr<Type> et) : elementType(std::move(et)) {}
-    std::string toString() const override { return "array(" + elementType->toString() + ")"; }
+    std::string toString() const override { return elementType->toString(); }
     bool equals(const Type& other) const override;
     // bool equals(const Type& other) const override {
     //     if (dynamic_cast<const NilType*>(&other)) {
@@ -104,7 +104,13 @@ struct ArrayType : Type {
 struct PtrType : Type {
     std::shared_ptr<Type> pointeeType;
     PtrType(std::shared_ptr<Type> pt) : pointeeType(std::move(pt)) {}
-    std::string toString() const override { return "ptr(" + pointeeType->toString() + ")"; }
+    std::string toString() const override { 
+        if (pointeeType) {
+            return "&" + pointeeType->toString();
+        } else {
+            return "ptr(<null>)"; // Or handle error appropriately
+        }
+    }
     bool equals(const Type& other) const override;
     // bool equals(const Type& other) const override {
     //     if (dynamic_cast<const NilType*>(&other)) {
@@ -295,9 +301,9 @@ struct BinOp : public Exp {
 struct NewSingle : public Exp {
     std::shared_ptr<Type> type;
     explicit NewSingle(std::shared_ptr<Type> t) : type(std::move(t)) {}
-    void print(std::ostream& os) const override { os << "NewSingle(" << type << ")"; }
+    void print(std::ostream& os) const override { os << "new " << type; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-    std::string toString() const override { return "new " + type->toString(); }
+    std::string toString() const override { return "(new " + type->toString() + ")"; }
 };
 
 struct NewArray : public Exp {
