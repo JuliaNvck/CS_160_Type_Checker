@@ -59,58 +59,62 @@ struct IntType : Type {
 
 struct NilType : Type {
     std::string toString() const override { return "nil"; }
-    bool equals(const Type& other) const override {
-        // nil is eq to nil, ptr(_), or array(_)
-        return dynamic_cast<const NilType*>(&other) != nullptr ||
-               dynamic_cast<const PtrType*>(&other) != nullptr ||
-               dynamic_cast<const ArrayType*>(&other) != nullptr;
-    }
+    bool equals(const Type& other) const override;
+    // bool equals(const Type& other) const override {
+    //     // nil is eq to nil, ptr(_), or array(_)
+    //     return dynamic_cast<const NilType*>(&other) != nullptr ||
+    //            dynamic_cast<const PtrType*>(&other) != nullptr ||
+    //            dynamic_cast<const ArrayType*>(&other) != nullptr;
+    // }
 };
 
 struct StructType : Type {
     std::string name;
     StructType(std::string n) : name(std::move(n)) {}
     std::string toString() const override { return "struct(" + name + ")"; }
-    bool equals(const Type& other) const override {
-        // nil is not eq to struct types
-        if (dynamic_cast<const NilType*>(&other)) {
-            return false;
-        }
-        if (const auto* other_struct = dynamic_cast<const StructType*>(&other)) {
-            return name == other_struct->name;
-        }
-        return false;
-    }
+    bool equals(const Type& other) const override;
+    // bool equals(const Type& other) const override {
+    //     // nil is not eq to struct types
+    //     if (dynamic_cast<const NilType*>(&other)) {
+    //         return false;
+    //     }
+    //     if (const auto* other_struct = dynamic_cast<const StructType*>(&other)) {
+    //         return name == other_struct->name;
+    //     }
+    //     return false;
+    // }
 };
 
 struct ArrayType : Type {
     std::shared_ptr<Type> elementType;
     ArrayType(std::shared_ptr<Type> et) : elementType(std::move(et)) {}
     std::string toString() const override { return "array(" + elementType->toString() + ")"; }
-    bool equals(const Type& other) const override {
-        if (dynamic_cast<const NilType*>(&other)) {
-            return true; // array(_) eq nil
-        }
-        if (const auto* other_array = dynamic_cast<const ArrayType*>(&other)) {
-            return TypePtrEqual()(elementType, other_array->elementType);
-        }
-        return false;
-    }
+    bool equals(const Type& other) const override;
+    // bool equals(const Type& other) const override {
+    //     if (dynamic_cast<const NilType*>(&other)) {
+    //         return true; // array(_) eq nil
+    //     }
+    //     if (const auto* other_array = dynamic_cast<const ArrayType*>(&other)) {
+    //         return TypePtrEqual()(elementType, other_array->elementType);
+    //     }
+    //     return false;
+    // }
 };
 
 struct PtrType : Type {
     std::shared_ptr<Type> pointeeType;
     PtrType(std::shared_ptr<Type> pt) : pointeeType(std::move(pt)) {}
     std::string toString() const override { return "ptr(" + pointeeType->toString() + ")"; }
-    bool equals(const Type& other) const override {
-        if (dynamic_cast<const NilType*>(&other)) {
-            return true; // ptr(_) eq nil
-        }
-        if (const auto* other_ptr = dynamic_cast<const PtrType*>(&other)) {
-             return TypePtrEqual()(pointeeType, other_ptr->pointeeType);
-        }
-        return false;
-    }
+    bool equals(const Type& other) const override;
+    // bool equals(const Type& other) const override {
+    //     if (dynamic_cast<const NilType*>(&other)) {
+    //         return true; // ptr(_) eq nil
+    //     }
+    //     if (const auto* other_ptr = dynamic_cast<const PtrType*>(&other)) {
+    //          return TypePtrEqual()(pointeeType, other_ptr->pointeeType);
+    //     }
+    //     return false;
+    // }
 };
 
 struct FnType : Type {
@@ -119,26 +123,27 @@ struct FnType : Type {
     FnType(std::vector<std::shared_ptr<Type>> pt, std::shared_ptr<Type> rt)
         : paramTypes(std::move(pt)), returnType(std::move(rt)) {}
     std::string toString() const override;
-    bool equals(const Type& other) const override {
-         // nil is not eq to function types
-        if (dynamic_cast<const NilType*>(&other)) {
-            return false;
-        }
-        if (const auto* other_fn = dynamic_cast<const FnType*>(&other)) {
-            if (paramTypes.size() != other_fn->paramTypes.size()) {
-                return false;
-            }
-            for (size_t i = 0; i < paramTypes.size(); ++i) {
-                // Use custom comparison
-                if (!TypePtrEqual()(paramTypes[i], other_fn->paramTypes[i])) {
-                    return false;
-                }
-            }
-            // Use custom comparison
-            return TypePtrEqual()(returnType, other_fn->returnType);
-        }
-        return false;
-    }
+    bool equals(const Type& other) const override;
+    // bool equals(const Type& other) const override {
+    //      // nil is not eq to function types
+    //     if (dynamic_cast<const NilType*>(&other)) {
+    //         return false;
+    //     }
+    //     if (const auto* other_fn = dynamic_cast<const FnType*>(&other)) {
+    //         if (paramTypes.size() != other_fn->paramTypes.size()) {
+    //             return false;
+    //         }
+    //         for (size_t i = 0; i < paramTypes.size(); ++i) {
+    //             // Use custom comparison
+    //             if (!TypePtrEqual()(paramTypes[i], other_fn->paramTypes[i])) {
+    //                 return false;
+    //             }
+    //         }
+    //         // Use custom comparison
+    //         return TypePtrEqual()(returnType, other_fn->returnType);
+    //     }
+    //     return false;
+    // }
 };
 
 // Type equality function eq(τ₁, τ₂) implementation

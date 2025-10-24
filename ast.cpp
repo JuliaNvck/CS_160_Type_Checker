@@ -27,6 +27,69 @@ std::string FnType::toString() const {
     return ss.str();
 }
 
+// Define equals methods moved from header because of circular dependency
+bool NilType::equals(const Type& other) const {
+    // nil is eq to nil, ptr(_), or array(_)
+    // Now PtrType and ArrayType are fully defined
+    return dynamic_cast<const NilType*>(&other) != nullptr ||
+           dynamic_cast<const PtrType*>(&other) != nullptr ||
+           dynamic_cast<const ArrayType*>(&other) != nullptr;
+}
+
+bool StructType::equals(const Type& other) const {
+    // nil is not eq to struct types
+    if (dynamic_cast<const NilType*>(&other)) {
+        return false;
+    }
+    if (const auto* other_struct = dynamic_cast<const StructType*>(&other)) {
+        return name == other_struct->name;
+    }
+    return false;
+}
+
+bool ArrayType::equals(const Type& other) const {
+    if (dynamic_cast<const NilType*>(&other)) {
+        return true; // array(_) eq nil
+    }
+    if (const auto* other_array = dynamic_cast<const ArrayType*>(&other)) {
+        // Now TypePtrEqual can be used as all types are defined
+        return TypePtrEqual()(elementType, other_array->elementType);
+    }
+    return false;
+}
+
+bool PtrType::equals(const Type& other) const {
+    if (dynamic_cast<const NilType*>(&other)) {
+        return true; // ptr(_) eq nil
+    }
+    if (const auto* other_ptr = dynamic_cast<const PtrType*>(&other)) {
+        // Now TypePtrEqual can be used as all types are defined
+         return TypePtrEqual()(pointeeType, other_ptr->pointeeType);
+    }
+    return false;
+}
+
+bool FnType::equals(const Type& other) const {
+    // nil is not eq to function types
+    if (dynamic_cast<const NilType*>(&other)) {
+        return false;
+    }
+    if (const auto* other_fn = dynamic_cast<const FnType*>(&other)) {
+        if (paramTypes.size() != other_fn->paramTypes.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < paramTypes.size(); ++i) {
+            // Use custom comparison
+            if (!TypePtrEqual()(paramTypes[i], other_fn->paramTypes[i])) {
+                return false;
+            }
+        }
+        // Use custom comparison
+        return TypePtrEqual()(returnType, other_fn->returnType);
+    }
+    return false;
+}
+
 // Type Helper Implementations
 
 // Type equality function eq(τ₁, τ₂)
