@@ -29,6 +29,7 @@ std::string FnType::toString() const {
         ss << paramTypes[i]->toString() << (i == paramTypes.size() - 1 ? "" : ",");
     }
     ss << ")";
+    ss << " -> " << returnType->toString();
     return ss.str();
 }
 
@@ -142,9 +143,21 @@ std::string UnOp::toString() const {
      std::string opStr;
      switch(op) {
          case UnaryOp::Neg: opStr = "-"; break;
-         case UnaryOp::Not: opStr = "!"; break;
+         case UnaryOp::Not: opStr = "not "; break;
      }
-     return opStr + exp->toString();
+     // Get the string of the sub-expression
+     std::string expStr = exp->toString();
+
+     // Check if the child expression is a BinOp
+     // We can do this by checking if the dynamic_cast succeeds.
+     if (dynamic_cast<const BinOp*>(exp.get())) {
+         // If it is a BinOp, add parentheses
+         return opStr + "(" + expStr + ")";
+     } else {
+         // Otherwise, no parentheses
+         return opStr + expStr;
+     }
+     // return opStr + exp->toString();
 }
 
 
@@ -182,7 +195,34 @@ std::string BinOp::toString() const {
         case BinaryOp::And: opStr = "&&"; break;
         case BinaryOp::Or: opStr = "||"; break;
      }
-     return "(" + left->toString() + " " + opStr + " " + right->toString() + ")"; // Added parens for clarity
+     return left->toString() + " " + opStr + " " + right->toString(); // Added parens for clarity
+}
+
+std::string Deref::toString() const {
+        std::string expStr = exp->toString();
+
+    // Unwrap Val to see the underlying Place, if it exists
+    const Node* checkExp = exp.get();
+    if (auto valNode = dynamic_cast<const Val*>(checkExp)) {
+        checkExp = valNode->place.get(); // Now checkExp points to the Place
+    }
+
+    // Parenthesize if the inner expression has lower precedence
+    // (BinOp, Select, NewArray, CallExp, or wrapped ArrayAccess/FieldAccess)
+    if (dynamic_cast<const BinOp*>(exp.get()) ||
+        dynamic_cast<const Select*>(exp.get()) ||
+        dynamic_cast<const NewArray*>(exp.get()) ||
+        dynamic_cast<const CallExp*>(exp.get()) ||
+        dynamic_cast<const ArrayAccess*>(checkExp) || // Check unwrapped expression
+        dynamic_cast<const FieldAccess*>(checkExp)  // Check unwrapped expression
+        ) {
+        
+        return "(" + expStr + ").*";
+    } else {
+        // High precedence expressions (Id, Val(Id), Num, Nil, NewSingle, UnOp, Deref)
+        // do not need parentheses.
+        return expStr + ".*";
+    }
 }
 
 
@@ -936,11 +976,17 @@ std::unique_ptr<Exp> buildExp(const nlohmann::json& j) {
     if (key == "NewSingle") { // {"NewSingle": Type}
          return std::make_unique<NewSingle>(buildType(value));
     }
-     if (key == "NewArray") { // {"NewArray": {"type": Type, "size": Exp}}
-         if (!value.is_object() || !value.contains("type") || !value.contains("size")) {
-             throw std::runtime_error("Invalid JSON for NewArray content");
+     if (key == "NewArray") { // {"NewArray": [ Type, Exp ]} 
+         // Check if the value is an array of size 2
+         if (!value.is_array() || value.size() != 2) {
+             throw std::runtime_error("Invalid JSON for NewArray content: Expected 2-element array [Type, Exp]");
          }
-         return std::make_unique<NewArray>(buildType(value.at("type")), buildExp(value.at("size")));
+         // Build the type from array[0]
+         auto type = buildType(value[0]);
+         // Build the size expression from array[1]
+         auto sizeExp = buildExp(value[1]);
+         // Create the NewArray node
+         return std::make_unique<NewArray>(std::move(type), std::move(sizeExp));
     }
      if (key == "CallExp") { // {"CallExp": FunCall}
          return std::make_unique<CallExp>(buildFunCall(value));

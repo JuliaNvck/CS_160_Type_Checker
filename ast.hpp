@@ -88,7 +88,14 @@ struct StructType : Type {
 struct ArrayType : Type {
     std::shared_ptr<Type> elementType;
     ArrayType(std::shared_ptr<Type> et) : elementType(std::move(et)) {}
-    std::string toString() const override { return elementType->toString(); }
+    std::string toString() const override { 
+        if (elementType) {
+        // Wrap the element type string in brackets
+        return "[" + elementType->toString() + "]";
+    } else {
+        return "[<null>]";
+    }
+     }
     bool equals(const Type& other) const override;
     // bool equals(const Type& other) const override {
     //     if (dynamic_cast<const NilType*>(&other)) {
@@ -321,7 +328,7 @@ struct Deref : public Place {
     explicit Deref(std::unique_ptr<Exp> e) : exp(std::move(e)) {}
     void print(std::ostream& os) const override { os << "Deref(" << exp << ")"; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-    std::string toString() const override { return exp->toString() + ".*"; }
+    std::string toString() const override;
 };
 
 struct ArrayAccess : public Place {
