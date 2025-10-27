@@ -133,7 +133,7 @@ std::shared_ptr<Type> pickNonNil(const std::shared_ptr<Type>& t1, const std::sha
 inline bool isLowPrecedence(const Exp* exp) {
     if (!exp) return false;
     
-    // BinOp and Select are the only true low-precedence operators
+    // ONLY BinOp and Select are low precedence and need wrapping.
     if (dynamic_cast<const BinOp*>(exp) ||
         dynamic_cast<const Select*>(exp)) {
         return true;
@@ -188,17 +188,8 @@ std::string ArrayAccess::toString() const {
     std::string arrayStr = array->toString();
     std::string indexStr = index->toString();
 
-    // Parenthesize if the BASE expression is low-precedence
-    // (This will NOT include NewArray, fixing Test 7)
-    if (isLowPrecedence(array.get())) {
-        arrayStr = "(" + arrayStr + ")";
-    }
-    
-    // Parenthesize if the INDEX expression is low-precedence
-    // (This will NOT include CallExp, fixing Test 6)
-    if (isLowPrecedence(index.get())) {
-        indexStr = "(" + indexStr + ")";
-    }
+    // Don't add any parentheses at the ArrayAccess level
+    // The sub-expressions handle their own precedence
     
     return arrayStr + "[" + indexStr + "]";
 }
@@ -206,10 +197,8 @@ std::string ArrayAccess::toString() const {
 std::string FieldAccess::toString() const {
     std::string ptrStr = ptr->toString();
 
-    // Parenthesize if the base expression is low-precedence
-    if (isLowPrecedence(ptr.get())) {
-        ptrStr = "(" + ptrStr + ")";
-    }
+    // Don't add any parentheses at the FieldAccess level
+    // The sub-expressions handle their own precedence
     
     return ptrStr + "." + field;
 }
@@ -231,7 +220,6 @@ std::string UnOp::toString() const {
      }
      std::string expStr = exp->toString();
      
-     // Parenthesize if child expression is low-precedence
      if (isLowPrecedence(exp.get())) {
          return opStr + "(" + expStr + ")";
      } else {
@@ -292,10 +280,22 @@ std::string BinOp::toString() const {
         case BinaryOp::Lte: opStr = "<="; break;
         case BinaryOp::Gt: opStr = ">"; break;
         case BinaryOp::Gte: opStr = ">="; break;
-        case BinaryOp::And: opStr = "&&"; break;
-        case BinaryOp::Or: opStr = "||"; break;
+        case BinaryOp::And: opStr = "and"; break;
+        case BinaryOp::Or: opStr = "or"; break;
      }
-     return left->toString() + " " + opStr + " " + right->toString();
+     
+     std::string leftStr = left->toString();
+     std::string rightStr = right->toString();
+     
+     // Parenthesize Select expressions (ternary has lowest precedence)
+     if (dynamic_cast<const Select*>(left.get())) {
+         leftStr = "(" + leftStr + ")";
+     }
+     if (dynamic_cast<const Select*>(right.get())) {
+         rightStr = "(" + rightStr + ")";
+     }
+     
+     return leftStr + " " + opStr + " " + rightStr;
 }
 
 // std::string Deref::toString() const {
@@ -328,8 +328,22 @@ std::string BinOp::toString() const {
 std::string Deref::toString() const {
     std::string expStr = exp->toString();
     
-    // Parenthesize if the base expression is low-precedence
-    if (isLowPrecedence(exp.get())) {
+    // Check if we need to unwrap Val to see the underlying Place
+    const Node* checkExp = exp.get();
+    if (auto valNode = dynamic_cast<const Val*>(checkExp)) {
+        checkExp = valNode->place.get();
+    }
+    
+    // Add parentheses for:
+    // - Low-precedence expressions (BinOp, Select)
+    // - Places (ArrayAccess, FieldAccess, Deref) which appear through Val
+    // - NewArray and NewSingle (to distinguish from array/pointer types)
+    if (isLowPrecedence(exp.get()) ||
+        dynamic_cast<const ArrayAccess*>(checkExp) ||
+        dynamic_cast<const FieldAccess*>(checkExp) ||
+        dynamic_cast<const Deref*>(checkExp) ||
+        dynamic_cast<const NewArray*>(exp.get()) ||
+        dynamic_cast<const NewSingle*>(exp.get())) {
         return "(" + expStr + ").*";
     } else {
         return expStr + ".*";
@@ -364,7 +378,6 @@ std::string FunCall::toString() const {
 
     std::string s = calleeStr + "(";
     for(size_t i = 0; i < args.size(); ++i) {
-        // Arguments are already grouped by ( ) and commas
         s += args[i]->toString();
         if (i < args.size() - 1) s += ", ";
     }
