@@ -1,0 +1,1 @@
+invalid: right operand of binary op 'JNV_1 or new int' has type &int, should be int

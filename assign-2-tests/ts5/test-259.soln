@@ -1,0 +1,1 @@
+invalid: invalid type used for allocation 'new () -> &int'

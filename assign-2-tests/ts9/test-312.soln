@@ -1,0 +1,1 @@
+invalid: non-pointer type [&[int]] for dereference '[&[int]; Fmu6gO_0(WSOJv(Ed))].*'

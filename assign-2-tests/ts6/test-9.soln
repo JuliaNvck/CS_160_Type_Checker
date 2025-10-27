@@ -1,0 +1,1 @@
+invalid: non-int index type [int] for array access '[int; SC_2][[int; 817423789]]'

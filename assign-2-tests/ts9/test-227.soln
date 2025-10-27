@@ -1,0 +1,1 @@
+invalid: incorrect number of arguments (0 vs 1) in call '(new &(&int) -> &int).*()'

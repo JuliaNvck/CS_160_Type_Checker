@@ -1,0 +1,1 @@
+invalid: non-int operand type &int in unary op '- (GR_0 ? Wp8rk31_1 : Wp8rk31_1)[not GR_0](new int)'

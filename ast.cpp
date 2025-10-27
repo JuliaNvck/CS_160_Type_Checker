@@ -142,6 +142,108 @@ inline bool isLowPrecedence(const Exp* exp) {
     return false;
 }
 
+// Helper to get operator precedence (higher number = higher precedence)
+inline int getOperatorPrecedence(BinaryOp op) {
+    switch(op) {
+        case BinaryOp::Mul:
+        case BinaryOp::Div:
+            return 6; // Multiplicative
+        case BinaryOp::Add:
+        case BinaryOp::Sub:
+            return 5; // Additive
+        case BinaryOp::Lt:
+        case BinaryOp::Lte:
+        case BinaryOp::Gt:
+        case BinaryOp::Gte:
+            return 4; // Comparison
+        case BinaryOp::Eq:
+        case BinaryOp::NotEq:
+            return 3; // Equality
+        case BinaryOp::And:
+            return 2; // Logical AND
+        case BinaryOp::Or:
+            return 1; // Logical OR
+    }
+    return 0;
+}
+
+// Forward declaration
+std::string toStringCompact(const Exp* exp);
+
+// Helper to render expressions compactly (without spaces in Neg UnOps) for error messages
+std::string toStringCompact(const Exp* exp) {
+    if (!exp) return "";
+    
+    // Handle UnOp specially - no space after "-", but keep space after "not"
+    if (const UnOp* unop = dynamic_cast<const UnOp*>(exp)) {
+        std::string opStr;
+        switch(unop->op) {
+            case UnaryOp::Neg: opStr = "-"; break;  // No space
+            case UnaryOp::Not: opStr = "not "; break;  // Keep space
+        }
+        std::string expStr = toStringCompact(unop->exp.get());
+        if (isLowPrecedence(unop->exp.get())) {
+            return opStr + "(" + expStr + ")";
+        } else {
+            return opStr + expStr;
+        }
+    }
+    
+    // Handle BinOp - recursively use compact form for operands
+    if (const BinOp* binop = dynamic_cast<const BinOp*>(exp)) {
+        std::string opStr;
+        switch(binop->op) {
+            case BinaryOp::Add: opStr = " + "; break;
+            case BinaryOp::Sub: opStr = " - "; break;
+            case BinaryOp::Mul: opStr = " * "; break;
+            case BinaryOp::Div: opStr = " / "; break;
+            case BinaryOp::Eq: opStr = " == "; break;
+            case BinaryOp::NotEq: opStr = " != "; break;
+            case BinaryOp::Lt: opStr = " < "; break;
+            case BinaryOp::Lte: opStr = " <= "; break;
+            case BinaryOp::Gt: opStr = " > "; break;
+            case BinaryOp::Gte: opStr = " >= "; break;
+            case BinaryOp::And: opStr = " and "; break;
+            case BinaryOp::Or: opStr = " or "; break;
+        }
+        
+        // Get precedence for parenthesization logic
+        int myPrecedence = getOperatorPrecedence(binop->op);
+        
+        // Left operand - wrap if strictly lower precedence
+        std::string leftStr = toStringCompact(binop->left.get());
+        if (const BinOp* leftBinOp = dynamic_cast<const BinOp*>(binop->left.get())) {
+            int leftPrecedence = getOperatorPrecedence(leftBinOp->op);
+            if (leftPrecedence < myPrecedence) {
+                leftStr = "(" + leftStr + ")";
+            }
+        }
+        
+        // Right operand - wrap if strictly lower precedence,
+        // OR if equal precedence and both are comparison operators (for chains like a < b < c)
+        std::string rightStr = toStringCompact(binop->right.get());
+        if (const BinOp* rightBinOp = dynamic_cast<const BinOp*>(binop->right.get())) {
+            int rightPrecedence = getOperatorPrecedence(rightBinOp->op);
+            bool needsParens = rightPrecedence < myPrecedence;
+            
+            // Special case: comparison chains (same precedence comparisons)
+            if (!needsParens && rightPrecedence == myPrecedence && myPrecedence == 4) {
+                // Both are comparison operators - wrap for chains like a <= b > c
+                needsParens = true;
+            }
+            
+            if (needsParens) {
+                rightStr = "(" + rightStr + ")";
+            }
+        }
+        
+        return leftStr + opStr + rightStr;
+    }
+    
+    // For other expressions, use normal toString
+    return exp->toString();
+}
+
 // std::string ArrayAccess::toString() const {
 //    std::string arrayStr = array->toString();
     
@@ -252,7 +354,7 @@ void UnOp::print(std::ostream& os) const {
 std::string UnOp::toString() const {
      std::string opStr;
      switch(op) {
-         case UnaryOp::Neg: opStr = "-"; break;
+         case UnaryOp::Neg: opStr = "- "; break;
          case UnaryOp::Not: opStr = "not "; break;
      }
      std::string expStr = exp->toString();
@@ -365,50 +467,93 @@ std::string BinOp::toString() const {
      
      std::string leftStr = left->toString();
      std::string rightStr = right->toString();
-     
-     // Don't parenthesize Select operands at the top level
-     // Only when this BinOp is nested in another node (like Select guard or another BinOp)
-     
-     // If right is a BinOp that contains a Select on its operands,
-     // we need to ensure those Selects are parenthesized
-     if (const BinOp* rightBinOp = dynamic_cast<const BinOp*>(right.get())) {
-         if (dynamic_cast<const Select*>(rightBinOp->left.get()) != nullptr ||
-             dynamic_cast<const Select*>(rightBinOp->right.get()) != nullptr) {
-             // Get the operator string for the right BinOp
-             std::string rightOpStr;
-             switch(rightBinOp->op) {
-                case BinaryOp::Add: rightOpStr = "+"; break;
-                case BinaryOp::Sub: rightOpStr = "-"; break;
-                case BinaryOp::Mul: rightOpStr = "*"; break;
-                case BinaryOp::Div: rightOpStr = "/"; break;
-                case BinaryOp::Eq: rightOpStr = "=="; break;
-                case BinaryOp::NotEq: rightOpStr = "!="; break;
-                case BinaryOp::Lt: rightOpStr = "<"; break;
-                case BinaryOp::Lte: rightOpStr = "<="; break;
-                case BinaryOp::Gt: rightOpStr = ">"; break;
-                case BinaryOp::Gte: rightOpStr = ">="; break;
-                case BinaryOp::And: rightOpStr = "and"; break;
-                case BinaryOp::Or: rightOpStr = "or"; break;
-             }
-             
-             // Re-render with Selects parenthesized
-             std::string rightLeftStr = rightBinOp->left->toString();
-             std::string rightRightStr = rightBinOp->right->toString();
-             
-             if (dynamic_cast<const Select*>(rightBinOp->left.get()) != nullptr) {
-                 rightLeftStr = "(" + rightLeftStr + ")";
-             }
-             
-             if (dynamic_cast<const Select*>(rightBinOp->right.get()) != nullptr) {
-                 rightRightStr = "(" + rightRightStr + ")";
-             }
-             
-             rightStr = rightLeftStr + " " + rightOpStr + " " + rightRightStr;
-         }
+
+     if (dynamic_cast<const Select*>(right.get())) {
+         rightStr = "(" + rightStr + ")";
      }
-     
+
      return leftStr + " " + opStr + " " + rightStr;
 }
+     
+//      // Handle operator precedence for left operand
+//      // Add parentheses if left has lower precedence
+//     //  if (const BinOp* leftBinOp = dynamic_cast<const BinOp*>(left.get())) {
+//     //      int myPrecedence = getOperatorPrecedence(op);
+//     //      int leftPrecedence = getOperatorPrecedence(leftBinOp->op);
+         
+//     //      // Left operand needs parens if it has strictly lower precedence
+//     //      if (leftPrecedence < myPrecedence) {
+//     //          leftStr = "(" + leftStr + ")";
+//     //      }
+//     //  }
+     
+//      // Handle operator precedence for right operand
+//      // Add parentheses for lower or same precedence
+//      if (const BinOp* rightBinOp = dynamic_cast<const BinOp*>(right.get())) {
+//          int myPrecedence = getOperatorPrecedence(op);
+//          int rightPrecedence = getOperatorPrecedence(rightBinOp->op);
+         
+//          bool needsParens = false;
+         
+//          // Same precedence needs parens for left-associativity
+//         //  if (rightPrecedence == myPrecedence) {
+//         //      needsParens = true;
+//         //  }
+//          // Lower precedence needs parens
+//         if (rightPrecedence < myPrecedence) {
+//              needsParens = true;
+//          }
+         
+//          if (needsParens) {
+//              rightStr = "(" + rightStr + ")";
+//          }
+//          // Also check if right BinOp has Select operands that need parens
+//          else if (dynamic_cast<const Select*>(rightBinOp->left.get()) != nullptr ||
+//                   dynamic_cast<const Select*>(rightBinOp->right.get()) != nullptr) {
+//              // Get the operator string for the right BinOp
+//              std::string rightOpStr;
+//              switch(rightBinOp->op) {
+//                 case BinaryOp::Add: rightOpStr = "+"; break;
+//                 case BinaryOp::Sub: rightOpStr = "-"; break;
+//                 case BinaryOp::Mul: rightOpStr = "*"; break;
+//                 case BinaryOp::Div: rightOpStr = "/"; break;
+//                 case BinaryOp::Eq: rightOpStr = "=="; break;
+//                 case BinaryOp::NotEq: rightOpStr = "!="; break;
+//                 case BinaryOp::Lt: rightOpStr = "<"; break;
+//                 case BinaryOp::Lte: rightOpStr = "<="; break;
+//                 case BinaryOp::Gt: rightOpStr = ">"; break;
+//                 case BinaryOp::Gte: rightOpStr = ">="; break;
+//                 case BinaryOp::And: rightOpStr = "and"; break;
+//                 case BinaryOp::Or: rightOpStr = "or"; break;
+//              }
+             
+//              // Re-render with Selects parenthesized
+//              std::string rightLeftStr = rightBinOp->left->toString();
+//              std::string rightRightStr = rightBinOp->right->toString();
+             
+//              if (dynamic_cast<const Select*>(rightBinOp->left.get()) != nullptr) {
+//                  rightLeftStr = "(" + rightLeftStr + ")";
+//              }
+             
+//              if (dynamic_cast<const Select*>(rightBinOp->right.get()) != nullptr) {
+//                  rightRightStr = "(" + rightRightStr + ")";
+//              }
+             
+//              rightStr = rightLeftStr + " " + rightOpStr + " " + rightRightStr;
+//          }
+//      }
+
+//      // Add wrapping for Select directly on the right
+//      else if (dynamic_cast<const Select*>(right.get())) {
+//           int myPrecedence = getOperatorPrecedence(op);
+//           // Assuming Select precedence is 0 or very low, wrap if right of any binary op
+//           if (myPrecedence > 0) { // Check if 'op' is actually a binary operator
+//               rightStr = "(" + rightStr + ")";
+//           }
+//      }
+     
+//      return leftStr + " " + opStr + " " + rightStr;
+// }
 
 // std::string Deref::toString() const {
 //         std::string expStr = exp->toString();
@@ -608,7 +753,7 @@ std::shared_ptr<Type> Deref::check(const Gamma& gamma, const Delta& delta) const
     }
     // Premise failed: The type was not a PtrType
     // Manually construct the string for top-level Deref without extra parens
-    std::string topLevelStr = exp->toString() + ".*";
+    std::string topLevelStr = toStringCompact(exp.get()) + ".*";
     throw TypeError("non-pointer type " + pointee->toString() + " for dereference '" + topLevelStr + "'");
 }
 
@@ -793,13 +938,13 @@ std::shared_ptr<Type> BinOp::check(const Gamma& gamma, const Delta& delta) const
     // Γ,∆ ⊢Binop(op,left,right) : int
     if (op == BinaryOp::Eq || op == BinaryOp::NotEq) {
         if (!typeEq(leftType, rightType)) {
-            throw TypeError("incompatible types " + leftType->toString() + " vs " + rightType->toString() + " in binary op '" + toString() + "'");
+            throw TypeError("incompatible types " + leftType->toString() + " vs " + rightType->toString() + " in binary op '" + toStringCompact(this) + "'");
         }
         if (dynamic_cast<StructType*>(leftType.get()) || dynamic_cast<FnType*>(leftType.get())) {
-             throw TypeError("invalid type " + leftType->toString() + " used in binary op '" + toString() + "'");
+             throw TypeError("invalid type " + leftType->toString() + " used in binary op '" + toStringCompact(this) + "'");
         }
         if (dynamic_cast<StructType*>(rightType.get()) || dynamic_cast<FnType*>(rightType.get())) {
-             throw TypeError("invalid type " + rightType->toString() + " used in binary op '" + toString() + "'");
+             throw TypeError("invalid type " + rightType->toString() + " used in binary op '" + toStringCompact(this) + "'");
         }
         return std::make_shared<IntType>();
     } else {
@@ -807,10 +952,10 @@ std::shared_ptr<Type> BinOp::check(const Gamma& gamma, const Delta& delta) const
         // op ̸∈{Equal,NotEq} Γ,∆ ⊢left : int Γ,∆ ⊢right : int
         // Γ,∆ ⊢Binop(op,left,right) : int
         if (!typeEq(leftType, std::make_shared<IntType>())) {
-            throw TypeError("non-int type " + leftType->toString() + " for left operand of binary op '" + toString() + "'");
+            throw TypeError("non-int type " + leftType->toString() + " for left operand of binary op '" + toStringCompact(this) + "'");
         }
          if (!typeEq(rightType, std::make_shared<IntType>())) {
-            throw TypeError("right operand of binary op '" + toString() + "' has type " + rightType->toString() + ", should be int");
+            throw TypeError("right operand of binary op '" + toStringCompact(this) + "' has type " + rightType->toString() + ", should be int");
         }
         return std::make_shared<IntType>();
     }
@@ -822,12 +967,12 @@ std::shared_ptr<Type> NewSingle::check(const Gamma& gamma, const Delta& delta) c
     if (dynamic_cast<NilType*>(type.get()) || dynamic_cast<FnType*>(type.get())) {
         throw TypeError("invalid type used for allocation '" + toString() + "'");
     }
-    // if struct type, does it exist in Delta? check it is defined
-     if (auto st = std::dynamic_pointer_cast<StructType>(type)) {
-         if (delta.find(st->name) == delta.end()) {
-             throw TypeError("allocating non-existent struct type '" + toString() + "'");
-         }
-     }
+    // // if struct type, does it exist in Delta? check it is defined
+    //  if (auto st = std::dynamic_pointer_cast<StructType>(type)) {
+    //      if (delta.find(st->name) == delta.end()) {
+    //          throw TypeError("allocating non-existent struct type '" + toString() + "'");
+    //      }
+    //  }
 
     return std::make_shared<PtrType>(type);
 }

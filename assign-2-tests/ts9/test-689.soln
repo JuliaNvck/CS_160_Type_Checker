@@ -1,0 +1,1 @@
+invalid: incompatible return type &&int for 'return IU8_0', should be &int

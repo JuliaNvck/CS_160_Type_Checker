@@ -1,0 +1,1 @@
+invalid: incompatible types [int] vs int in binary op 'T_10[Q_0][-Q_0][Q_0] == S2iB_5 - 606389213'

@@ -1,0 +1,1 @@
+invalid: non-int type [int] for if guard '[int; (A7_1 ? sIqZ9hot_8 : new int).*]'

@@ -1,0 +1,1 @@
+invalid: &&int is not a struct pointer type in field access '(-K4hE_4 ? new &&int : yFU_105).*.H'

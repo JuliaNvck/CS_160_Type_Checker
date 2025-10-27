@@ -1,0 +1,1 @@
+invalid: invalid type (int) -> int for left-hand side of assignment 'CKinJIB_0.* = (new &(int) -> int).*.*'

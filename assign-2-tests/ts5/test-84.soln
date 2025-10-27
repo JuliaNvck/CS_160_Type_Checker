@@ -1,0 +1,1 @@
+invalid: right operand of binary op '593795629 * (new &int).*' has type &int, should be int

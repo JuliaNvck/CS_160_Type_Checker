@@ -1,0 +1,1 @@
+invalid: incompatible types [int] vs &int in select branches '(new &Z0K).*.TgqvCvDrge.X1' vs '(new &int).*'

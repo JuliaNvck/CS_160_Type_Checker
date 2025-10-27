@@ -1,0 +1,1 @@
+invalid: &[&int] is not a struct pointer type in field access 'JD_0[-(AZ_1 ? AZ_1 : 954319364)].QOv20'

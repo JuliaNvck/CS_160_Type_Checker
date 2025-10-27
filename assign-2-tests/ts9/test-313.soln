@@ -1,0 +1,1 @@
+invalid: non-pointer type [&int] for dereference 'l_0.*'

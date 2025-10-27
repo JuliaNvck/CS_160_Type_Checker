@@ -1,0 +1,1 @@
+invalid: incompatible return type &int for 'return it() ? FRu_2 : f_vDe8I_58(new int)', should be int
