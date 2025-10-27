@@ -447,12 +447,13 @@ std::string Deref::toString() const {
     }
     
     // Add parentheses for:
-    // - Low-precedence expressions (BinOp, Select)
-    // - Places (ArrayAccess, FieldAccess) which appear through Val - but NOT Deref
-    // - NewArray and NewSingle (to distinguish from array/pointer types)
+    // - Low-precedence expressions (BinOp, Select) 
+    // - Places (ArrayAccess, FieldAccess) accessed through Val - to show dereference applies to the whole place
+    // - NewSingle and NewArray - to distinguish from type syntax
+    // - But NOT for plain Deref (allows chaining like `x.*.*`)
     if (isLowPrecedence(exp.get()) ||
-        dynamic_cast<const ArrayAccess*>(checkExp) ||
-        dynamic_cast<const FieldAccess*>(checkExp) ||
+        (dynamic_cast<const ArrayAccess*>(checkExp) && dynamic_cast<const Val*>(exp.get())) ||
+        (dynamic_cast<const FieldAccess*>(checkExp) && dynamic_cast<const Val*>(exp.get())) ||
         dynamic_cast<const NewArray*>(exp.get()) ||
         dynamic_cast<const NewSingle*>(exp.get())) {
         return "(" + expStr + ").*";
@@ -606,7 +607,9 @@ std::shared_ptr<Type> Deref::check(const Gamma& gamma, const Delta& delta) const
         return ptrType->pointeeType;
     }
     // Premise failed: The type was not a PtrType
-    throw TypeError("non-pointer type " + pointee->toString() + " for dereference '" + toString() + "'");
+    // Manually construct the string for top-level Deref without extra parens
+    std::string topLevelStr = exp->toString() + ".*";
+    throw TypeError("non-pointer type " + pointee->toString() + " for dereference '" + topLevelStr + "'");
 }
 
 // Γ,∆ ⊢arr : array(τ) Γ,∆ ⊢idx : int
