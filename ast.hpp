@@ -310,7 +310,7 @@ struct NewSingle : public Exp {
     explicit NewSingle(std::shared_ptr<Type> t) : type(std::move(t)) {}
     void print(std::ostream& os) const override { os << "new " << type; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-    std::string toString() const override { return "(new " + type->toString() + ")"; }
+    std::string toString() const override { return "new " + type->toString(); }
 };
 
 struct NewArray : public Exp {
@@ -338,7 +338,7 @@ struct ArrayAccess : public Place {
     : array(std::move(arr)), index(std::move(idx)) {}
     void print(std::ostream& os) const override { os << "ArrayAccess { array: " << array << ", idx: " << index << " }"; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-     std::string toString() const override { return array->toString() + "[" + index->toString() + "]"; }
+     std::string toString() const override; // { return array->toString() + "[" + index->toString() + "]"; }
 };
 
 struct FieldAccess : public Place {
@@ -348,7 +348,7 @@ struct FieldAccess : public Place {
     : ptr(std::move(p)), field(std::move(f)) {}
     void print(std::ostream& os) const override { os << "FieldAccess { ptr: " << ptr << ", field: \"" << field << "\" }"; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-    std::string toString() const override { return ptr->toString() + "." + field; }
+    std::string toString() const override; //  { return ptr->toString() + "." + field; }
 };
 
 struct FunCall: Node {

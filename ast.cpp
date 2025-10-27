@@ -130,6 +130,89 @@ std::shared_ptr<Type> pickNonNil(const std::shared_ptr<Type>& t1, const std::sha
 }
 
 // Print Implementations
+inline bool isLowPrecedence(const Exp* exp) {
+    if (!exp) return false;
+    
+    // BinOp and Select are the only true low-precedence operators
+    if (dynamic_cast<const BinOp*>(exp) ||
+        dynamic_cast<const Select*>(exp)) {
+        return true;
+    }
+    
+    return false;
+}
+
+// std::string ArrayAccess::toString() const {
+//    std::string arrayStr = array->toString();
+    
+//     // --- Logic for the 'array' part (LHS of [...]) ---
+//     const Node* checkArrayExp = array.get();
+//     if (auto valNode = dynamic_cast<const Val*>(checkArrayExp)) {
+//         checkArrayExp = valNode->place.get();
+//     }
+
+//     // Parenthesize if the array expression has lower precedence
+//     // (Select, BinOp, Call)
+//     // *** REMOVED NewArray from this list ***
+//     if (dynamic_cast<const BinOp*>(array.get()) ||
+//         dynamic_cast<const Select*>(array.get()) || 
+//         dynamic_cast<const CallExp*>(array.get())
+//         ) {
+//         arrayStr = "(" + arrayStr + ")";
+//     }
+
+//     // --- Logic for the 'index' part (inside [...]) ---
+//     std::string indexStr = index->toString();
+    
+//     const Node* checkIndexExp = index.get();
+//     if (auto valNode = dynamic_cast<const Val*>(checkIndexExp)) {
+//          checkIndexExp = valNode->place.get();
+//     }
+
+//     // *** ADDED THIS ENTIRE BLOCK ***
+//     // Parenthesize if the index expression has lower precedence
+//     // (Select, BinOp, Call, NewArray)
+//     if (dynamic_cast<const BinOp*>(index.get()) ||
+//         dynamic_cast<const Select*>(index.get()) ||
+//         dynamic_cast<const NewArray*>(index.get()) || 
+//         dynamic_cast<const CallExp*>(index.get())
+//         ) {
+//         indexStr = "(" + indexStr + ")";
+//     }
+    
+//     // Combine the (potentially parenthesized) parts
+//     return arrayStr + "[" + indexStr + "]";
+// }
+
+std::string ArrayAccess::toString() const {
+    std::string arrayStr = array->toString();
+    std::string indexStr = index->toString();
+
+    // Parenthesize if the BASE expression is low-precedence
+    // (This will NOT include NewArray, fixing Test 7)
+    if (isLowPrecedence(array.get())) {
+        arrayStr = "(" + arrayStr + ")";
+    }
+    
+    // Parenthesize if the INDEX expression is low-precedence
+    // (This will NOT include CallExp, fixing Test 6)
+    if (isLowPrecedence(index.get())) {
+        indexStr = "(" + indexStr + ")";
+    }
+    
+    return arrayStr + "[" + indexStr + "]";
+}
+
+std::string FieldAccess::toString() const {
+    std::string ptrStr = ptr->toString();
+
+    // Parenthesize if the base expression is low-precedence
+    if (isLowPrecedence(ptr.get())) {
+        ptrStr = "(" + ptrStr + ")";
+    }
+    
+    return ptrStr + "." + field;
+}
 
 void UnOp::print(std::ostream& os) const {
     os << "UnOp(";
@@ -139,26 +222,43 @@ void UnOp::print(std::ostream& os) const {
     }
     os << ", " << exp << ")";
 }
+
 std::string UnOp::toString() const {
      std::string opStr;
      switch(op) {
          case UnaryOp::Neg: opStr = "-"; break;
          case UnaryOp::Not: opStr = "not "; break;
      }
-     // Get the string of the sub-expression
      std::string expStr = exp->toString();
-
-     // Check if the child expression is a BinOp
-     // We can do this by checking if the dynamic_cast succeeds.
-     if (dynamic_cast<const BinOp*>(exp.get())) {
-         // If it is a BinOp, add parentheses
+     
+     // Parenthesize if child expression is low-precedence
+     if (isLowPrecedence(exp.get())) {
          return opStr + "(" + expStr + ")";
      } else {
-         // Otherwise, no parentheses
          return opStr + expStr;
      }
-     // return opStr + exp->toString();
 }
+
+// std::string UnOp::toString() const {
+//      std::string opStr;
+//      switch(op) {
+//          case UnaryOp::Neg: opStr = "-"; break;
+//          case UnaryOp::Not: opStr = "not "; break;
+//      }
+//      // Get the string of the sub-expression
+//      std::string expStr = exp->toString();
+
+//      // Check if the child expression is a BinOp
+//      // We can do this by checking if the dynamic_cast succeeds.
+//      if (dynamic_cast<const BinOp*>(exp.get())) {
+//          // If it is a BinOp, add parentheses
+//          return opStr + "(" + expStr + ")";
+//      } else {
+//          // Otherwise, no parentheses
+//          return opStr + expStr;
+//      }
+//      // return opStr + exp->toString();
+// }
 
 
 void BinOp::print(std::ostream& os) const {
@@ -195,32 +295,43 @@ std::string BinOp::toString() const {
         case BinaryOp::And: opStr = "&&"; break;
         case BinaryOp::Or: opStr = "||"; break;
      }
-     return left->toString() + " " + opStr + " " + right->toString(); // Added parens for clarity
+     return left->toString() + " " + opStr + " " + right->toString();
 }
 
-std::string Deref::toString() const {
-        std::string expStr = exp->toString();
+// std::string Deref::toString() const {
+//         std::string expStr = exp->toString();
 
-    // Unwrap Val to see the underlying Place, if it exists
-    const Node* checkExp = exp.get();
-    if (auto valNode = dynamic_cast<const Val*>(checkExp)) {
-        checkExp = valNode->place.get(); // Now checkExp points to the Place
-    }
+//     // Unwrap Val to see the underlying Place, if it exists
+//     const Node* checkExp = exp.get();
+//     if (auto valNode = dynamic_cast<const Val*>(checkExp)) {
+//         checkExp = valNode->place.get(); // Now checkExp points to the Place
+//     }
 
-    // Parenthesize if the inner expression has lower precedence
-    // (BinOp, Select, NewArray, CallExp, or wrapped ArrayAccess/FieldAccess)
-    if (dynamic_cast<const BinOp*>(exp.get()) ||
-        dynamic_cast<const Select*>(exp.get()) ||
-        dynamic_cast<const NewArray*>(exp.get()) ||
-        dynamic_cast<const CallExp*>(exp.get()) ||
-        dynamic_cast<const ArrayAccess*>(checkExp) || // Check unwrapped expression
-        dynamic_cast<const FieldAccess*>(checkExp)  // Check unwrapped expression
-        ) {
+//     // Parenthesize if the inner expression has lower precedence
+//     // (BinOp, Select, NewArray, CallExp, or wrapped ArrayAccess/FieldAccess)
+//     if (dynamic_cast<const BinOp*>(exp.get()) ||
+//         dynamic_cast<const Select*>(exp.get()) ||
+//         dynamic_cast<const NewArray*>(exp.get()) ||
+//         dynamic_cast<const CallExp*>(exp.get()) ||
+//         dynamic_cast<const NewSingle*>(checkExp) ||
+//         dynamic_cast<const ArrayAccess*>(checkExp)
+//         ) {
         
+//         return "(" + expStr + ").*";
+//     } else {
+//         // High precedence expressions (Id, Val(Id), Num, Nil, NewSingle, UnOp, Deref)
+//         // do not need parentheses.
+//         return expStr + ".*";
+//     }
+// }
+
+std::string Deref::toString() const {
+    std::string expStr = exp->toString();
+    
+    // Parenthesize if the base expression is low-precedence
+    if (isLowPrecedence(exp.get())) {
         return "(" + expStr + ").*";
     } else {
-        // High precedence expressions (Id, Val(Id), Num, Nil, NewSingle, UnOp, Deref)
-        // do not need parentheses.
         return expStr + ".*";
     }
 }
@@ -234,9 +345,26 @@ void FunCall::print(std::ostream& os) const {
     }
     os << "] }";
 }
+// std::string FunCall::toString() const {
+//     std::string s = callee->toString() + "(";
+//     for(size_t i = 0; i < args.size(); ++i) {
+//         s += args[i]->toString();
+//         if (i < args.size() - 1) s += ", ";
+//     }
+//     s += ")";
+//     return s;
+// }
 std::string FunCall::toString() const {
-    std::string s = callee->toString() + "(";
+    std::string calleeStr = callee->toString();
+    
+    // Parenthesize if the CALLEE expression is low-precedence
+    if (isLowPrecedence(callee.get())) {
+        calleeStr = "(" + calleeStr + ")";
+    }
+
+    std::string s = calleeStr + "(";
     for(size_t i = 0; i < args.size(); ++i) {
+        // Arguments are already grouped by ( ) and commas
         s += args[i]->toString();
         if (i < args.size() - 1) s += ", ";
     }
@@ -371,7 +499,7 @@ std::shared_ptr<Type> ArrayAccess::check(const Gamma& gamma, const Delta& delta)
         return actualArrayType->elementType;
     }
     if (typeEq(arrType, std::make_shared<NilType>())) {
-         throw TypeError("cannot access element of 'nil' array in '" + toString() + "'");
+         throw TypeError("non-array type " + arrType->toString() + " for array access '" + toString() + "'");
     }
 
     throw TypeError("non-array type " + arrType->toString() + " for array access '" + toString() + "'");
@@ -509,70 +637,125 @@ std::shared_ptr<Type> NewArray::check(const Gamma& gamma, const Delta& delta) co
 // Γ,∆ ⊢FunCall(callee,args) : τ′
 std::shared_ptr<Type> FunCall::check(const Gamma& gamma, const Delta& delta) const {
     // Get the type of the expression being called
+    // auto calleeType = callee->check(gamma, delta);
+    // std::shared_ptr<FnType> funcType = nullptr;
+
+    // // Direct call (identifier)? Need special handling for 'main'
+    // if (auto idExp = dynamic_cast<Id*>(callee.get())) { // Check direct Id, not Val(Id)
+    //     if (idExp->name == "main") {
+    //         throw TypeError("trying to call 'main'");
+    //     }
+    //     // Look up the Id's name in Gamma
+    //     if (gamma.count(idExp->name)) {
+    //         auto potentialFnType = gamma.at(idExp->name);
+    //          // Externs have type fn(...), internal functions have type ptr(fn(...))
+    //         if (auto directFn = std::dynamic_pointer_cast<FnType>(potentialFnType)) {
+    //             funcType = directFn; // Extern call
+    //         } else if (auto ptrFn = std::dynamic_pointer_cast<PtrType>(potentialFnType)) {
+    //              funcType = std::dynamic_pointer_cast<FnType>(ptrFn->pointeeType); // Internal call
+    //         }
+    //     }
+    //  } else if (auto valExp = dynamic_cast<Val*>(callee.get())) { // Check for Val(Id) too. Val(Id) when an Id is used as an expression
+    //      if (auto idPlace = dynamic_cast<Id*>(valExp->place.get())) {
+    //          if (idPlace->name == "main") {
+    //              throw TypeError("trying to call 'main'");
+    //          }
+    //          if (gamma.count(idPlace->name)) {
+    //              auto potentialFnType = gamma.at(idPlace->name);
+    //              if (auto directFn = std::dynamic_pointer_cast<FnType>(potentialFnType)) {
+    //                  funcType = directFn;
+    //              } else if (auto ptrFn = std::dynamic_pointer_cast<PtrType>(potentialFnType)) {
+    //                  funcType = std::dynamic_pointer_cast<FnType>(ptrFn->pointeeType);
+    //              }
+    //          }
+    //      }
+    //  }
+
+
+    // // Indirect call (pointer)?
+    // // covers cases like (*ptr_to_func)(arg) or obj.func_ptr_field(arg)
+    // if (!funcType) {
+    //     // Check if 'calleeType' is PtrType(...)
+    //     if (auto ptrFn = std::dynamic_pointer_cast<PtrType>(calleeType)) {
+    //         // Check if it points to FnType(...)
+    //         funcType = std::dynamic_pointer_cast<FnType>(ptrFn->pointeeType);
+    //     }
+    // }
+
+    // if (!funcType) { // Check if a valid function type (FnType) was found.
+    //      throw TypeError("trying to call type " + calleeType->toString() + " as function pointer in call '" + toString() + "'");
+    // }
+
+    // // Check number of arguments: Compare number of args provided vs. expected parameters
+    // if (args.size() != funcType->paramTypes.size()) {
+    //      throw TypeError("incorrect number of arguments (" + std::to_string(args.size()) + " vs " + std::to_string(funcType->paramTypes.size()) + ") in call '" + toString() + "'");
+    // }
+
+    // // Check argument types: Loop through provided args and expected param types.
+    // for (size_t i = 0; i < args.size(); ++i) {
+    //     auto argType = args[i]->check(gamma, delta);
+    //     const auto& paramType = funcType->paramTypes[i];
+    //     if (!typeEq(argType, paramType)) {
+    //          throw TypeError("incompatible argument type " + argType->toString() + " vs parameter type " + paramType->toString() + " for argument '" + args[i]->toString() + "' in call '" + toString() + "'");
+    //     }
+    // }
+    // // All Premises Passed: Return the function's return type (τ').
+    // return funcType->returnType;
+
+    const Id* direct_id = nullptr;
+    if (auto idExp = dynamic_cast<Id*>(callee.get())) {
+        direct_id = idExp;
+    } else if (auto valExp = dynamic_cast<Val*>(callee.get())) {
+        direct_id = dynamic_cast<Id*>(valExp->place.get());
+    }
+
+    if (direct_id) {
+        // It is a direct call to an Id. Check if it's 'main'.
+        // This implements Premise 3: callee != 'main'
+        if (direct_id->name == "main") {
+            throw TypeError("trying to call 'main'"); //
+        }
+    }
+    // --- FIX END ---
+
+    // 2. Now that we know it's not a call to 'main', it's safe to get the callee's type.
+    // This evaluates Premise 1: Γ, Δ ⊢ callee : fn(...) ∨ ptr(fn(...))
     auto calleeType = callee->check(gamma, delta);
     std::shared_ptr<FnType> funcType = nullptr;
+    
+    // 3. Determine the actual function type (FnType) from the callee's type
+    // Case 1: Direct extern call (calleeType is FnType)
+    if (auto directFn = std::dynamic_pointer_cast<FnType>(calleeType)) {
+        funcType = directFn;
+    } 
+    // Case 2: Internal function call or function pointer call (calleeType is Ptr(FnType))
+    else if (auto ptrFn = std::dynamic_pointer_cast<PtrType>(calleeType)) {
+        funcType = std::dynamic_pointer_cast<FnType>(ptrFn->pointeeType);
+    }
 
-    // Direct call (identifier)? Need special handling for 'main'
-    if (auto idExp = dynamic_cast<Id*>(callee.get())) { // Check direct Id, not Val(Id)
-        if (idExp->name == "main") {
-            throw TypeError("trying to call 'main'");
-        }
-        // Look up the Id's name in Gamma
-        if (gamma.count(idExp->name)) {
-            auto potentialFnType = gamma.at(idExp->name);
-             // Externs have type fn(...), internal functions have type ptr(fn(...))
-            if (auto directFn = std::dynamic_pointer_cast<FnType>(potentialFnType)) {
-                funcType = directFn; // Extern call
-            } else if (auto ptrFn = std::dynamic_pointer_cast<PtrType>(potentialFnType)) {
-                 funcType = std::dynamic_pointer_cast<FnType>(ptrFn->pointeeType); // Internal call
-            }
-        }
-     } else if (auto valExp = dynamic_cast<Val*>(callee.get())) { // Check for Val(Id) too. Val(Id) when an Id is used as an expression
-         if (auto idPlace = dynamic_cast<Id*>(valExp->place.get())) {
-             if (idPlace->name == "main") {
-                 throw TypeError("trying to call 'main'");
-             }
-             if (gamma.count(idPlace->name)) {
-                 auto potentialFnType = gamma.at(idPlace->name);
-                 if (auto directFn = std::dynamic_pointer_cast<FnType>(potentialFnType)) {
-                     funcType = directFn;
-                 } else if (auto ptrFn = std::dynamic_pointer_cast<PtrType>(potentialFnType)) {
-                     funcType = std::dynamic_pointer_cast<FnType>(ptrFn->pointeeType);
-                 }
-             }
-         }
-     }
-
-
-    // Indirect call (pointer)?
-    // covers cases like (*ptr_to_func)(arg) or obj.func_ptr_field(arg)
+    // 4. Check if a function type was found
     if (!funcType) {
-        // Check if 'calleeType' is PtrType(...)
-        if (auto ptrFn = std::dynamic_pointer_cast<PtrType>(calleeType)) {
-            // Check if it points to FnType(...)
-            funcType = std::dynamic_pointer_cast<FnType>(ptrFn->pointeeType);
-        }
+         // Premise 1 failed.
+         throw TypeError("trying to call type " + calleeType->toString() + " as function pointer in call '" + toString() + "'"); //
     }
 
-    if (!funcType) { // Check if a valid function type (FnType) was found.
-         throw TypeError("trying to call type " + calleeType->toString() + " as function pointer in call '" + toString() + "'");
-    }
-
-    // Check number of arguments: Compare number of args provided vs. expected parameters
+    // 5. Check Premise 2: Argument count
     if (args.size() != funcType->paramTypes.size()) {
-         throw TypeError("incorrect number of arguments (" + std::to_string(args.size()) + " vs " + std::to_string(funcType->paramTypes.size()) + ") in call '" + toString() + "'");
+         throw TypeError("incorrect number of arguments (" + std::to_string(args.size()) + " vs " + std::to_string(funcType->paramTypes.size()) + ") in call '" + toString() + "'"); //
     }
 
-    // Check argument types: Loop through provided args and expected param types.
+    // 6. Check Premise 2: Argument types
     for (size_t i = 0; i < args.size(); ++i) {
         auto argType = args[i]->check(gamma, delta);
         const auto& paramType = funcType->paramTypes[i];
         if (!typeEq(argType, paramType)) {
-             throw TypeError("incompatible argument type " + argType->toString() + " vs parameter type " + paramType->toString() + " for argument '" + args[i]->toString() + "' in call '" + toString() + "'");
+             throw TypeError("incompatible argument type " + argType->toString() + " vs parameter type " + paramType->toString() + " for argument '" + args[i]->toString() + "' in call '" + toString() + "'"); //
         }
     }
-    // All Premises Passed: Return the function's return type (τ').
-    return funcType->returnType;
+
+    // 7. Conclusion: Return the function's return type (τ')
+    return funcType->returnType; //
+
 }
 
 
@@ -988,7 +1171,7 @@ std::unique_ptr<Exp> buildExp(const nlohmann::json& j) {
          // Create the NewArray node
          return std::make_unique<NewArray>(std::move(type), std::move(sizeExp));
     }
-     if (key == "CallExp") { // {"CallExp": FunCall}
+     if (key == "Call") { // {"CallExp": FunCall}
          return std::make_unique<CallExp>(buildFunCall(value));
      }
      if (key == "Val") { // Handle explicit Val if it appears: {"Val": Place}
@@ -1144,17 +1327,28 @@ std::unique_ptr<StructDef> buildStructDef(const nlohmann::json& j) {
 
 // Parses Extern representations from JSON.
 Extern buildExtern(const nlohmann::json& j) {
-    // Assuming {"name": "...", "params": [Type, ...], "rettyp": Type}
-    // Note: JSON key might be "prms" like in FunctionDef, adjust if necessary. Assuming "params" for now.
-     if (!j.is_object() || !j.contains("name") || !j.contains("params") || !j.contains("rettyp") || !j.at("params").is_array()) {
-         throw std::runtime_error("Invalid JSON for Extern definition");
+    // Correct JSON format is {"name": "...", "typ": TypeObject}
+    // Check for keys "name" and "typ"
+     if (!j.is_object() || !j.contains("name") || !j.contains("typ")) {
+         throw std::runtime_error("Invalid JSON for Extern definition: missing 'name' or 'typ'");
     }
+    
     Extern e;
     e.name = j.at("name").get<std::string>();
-    e.rettype = buildType(j.at("rettype"));
-     for (const auto& p_type : j.at("params")) { // Externs just list types
-        e.param_types.push_back(buildType(p_type));
+    
+    // Build the type from the "typ" field
+    auto built_type = buildType(j.at("typ"));
+    
+    // Verify the type is a function type (FnType)
+    if (auto fn_type = std::dynamic_pointer_cast<FnType>(built_type)) {
+        // It's a function type, extract its components
+        e.rettype = fn_type->returnType;
+        e.param_types = fn_type->paramTypes;
+    } else {
+        // The type specified for the extern is not a function type
+        throw std::runtime_error("Invalid JSON for Extern definition: 'typ' field is not a function type (Fn)");
     }
+    
     return e;
 }
 
