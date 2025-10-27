@@ -290,9 +290,44 @@ std::string BinOp::toString() const {
      std::string leftStr = left->toString();
      std::string rightStr = right->toString();
      
-     // Only parenthesize Select on the RIGHT side (to prevent ambiguous parsing)
-     if (dynamic_cast<const Select*>(right.get())) {
+     // Parenthesize Select on the RIGHT side (to prevent ambiguous parsing)
+     if (dynamic_cast<const Select*>(right.get()) != nullptr) {
          rightStr = "(" + rightStr + ")";
+     }
+     
+     // If right is a BinOp that contains a Select on its left, 
+     // we need to ensure that left Select is parenthesized
+     if (const BinOp* rightBinOp = dynamic_cast<const BinOp*>(right.get())) {
+         if (dynamic_cast<const Select*>(rightBinOp->left.get()) != nullptr) {
+             // Get the operator string for the right BinOp
+             std::string rightOpStr;
+             switch(rightBinOp->op) {
+                case BinaryOp::Add: rightOpStr = "+"; break;
+                case BinaryOp::Sub: rightOpStr = "-"; break;
+                case BinaryOp::Mul: rightOpStr = "*"; break;
+                case BinaryOp::Div: rightOpStr = "/"; break;
+                case BinaryOp::Eq: rightOpStr = "=="; break;
+                case BinaryOp::NotEq: rightOpStr = "!="; break;
+                case BinaryOp::Lt: rightOpStr = "<"; break;
+                case BinaryOp::Lte: rightOpStr = "<="; break;
+                case BinaryOp::Gt: rightOpStr = ">"; break;
+                case BinaryOp::Gte: rightOpStr = ">="; break;
+                case BinaryOp::And: rightOpStr = "and"; break;
+                case BinaryOp::Or: rightOpStr = "or"; break;
+             }
+             
+             // Re-render with the left Select parenthesized
+             std::string rightLeftStr = rightBinOp->left->toString();
+             std::string rightRightStr = rightBinOp->right->toString();
+             
+             rightLeftStr = "(" + rightLeftStr + ")";
+             
+             if (dynamic_cast<const Select*>(rightBinOp->right.get()) != nullptr) {
+                 rightRightStr = "(" + rightRightStr + ")";
+             }
+             
+             rightStr = rightLeftStr + " " + rightOpStr + " " + rightRightStr;
+         }
      }
      
      return leftStr + " " + opStr + " " + rightStr;
@@ -336,12 +371,11 @@ std::string Deref::toString() const {
     
     // Add parentheses for:
     // - Low-precedence expressions (BinOp, Select)
-    // - Places (ArrayAccess, FieldAccess, Deref) which appear through Val
+    // - Places (ArrayAccess, FieldAccess) which appear through Val - but NOT Deref
     // - NewArray and NewSingle (to distinguish from array/pointer types)
     if (isLowPrecedence(exp.get()) ||
         dynamic_cast<const ArrayAccess*>(checkExp) ||
         dynamic_cast<const FieldAccess*>(checkExp) ||
-        dynamic_cast<const Deref*>(checkExp) ||
         dynamic_cast<const NewArray*>(exp.get()) ||
         dynamic_cast<const NewSingle*>(exp.get())) {
         return "(" + expStr + ").*";
@@ -567,6 +601,28 @@ std::shared_ptr<Type> Select::check(const Gamma& gamma, const Delta& delta) cons
     }
 
     return pickNonNil(ttType, ffType);
+}
+
+std::string Select::toString() const {
+    std::string guardStr = guard->toString();
+    std::string ttStr = tt->toString();
+    std::string ffStr = ff->toString();
+    
+    // Parenthesize BinOp in guard to avoid ambiguity
+    // e.g., "a < b ? c : d" when this Select is an operand
+    if (dynamic_cast<const BinOp*>(guard.get())) {
+        guardStr = "(" + guardStr + ")";
+    }
+    
+    // Parenthesize nested Select expressions in the true/false branches
+    if (dynamic_cast<const Select*>(tt.get())) {
+        ttStr = "(" + ttStr + ")";
+    }
+    if (dynamic_cast<const Select*>(ff.get())) {
+        ffStr = "(" + ffStr + ")";
+    }
+    
+    return guardStr + " ? " + ttStr + " : " + ffStr;
 }
 
 // Γ,∆ ⊢e : int

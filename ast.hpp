@@ -282,7 +282,7 @@ struct Select : public Exp {
     : guard(std::move(g)), tt(std::move(t)), ff(std::move(f)) {}
     void print(std::ostream& os) const override { os << "Select { guard: " << guard << ", tt: " << tt << ", ff: " << ff << " }"; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-     std::string toString() const override { return guard->toString() + " ? " + tt->toString() + " : " + ff->toString(); }
+    std::string toString() const override;
 };
 
 struct UnOp : public Exp {
