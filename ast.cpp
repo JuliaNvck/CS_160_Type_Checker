@@ -188,8 +188,11 @@ std::string ArrayAccess::toString() const {
     std::string arrayStr = array->toString();
     std::string indexStr = index->toString();
 
-    // Don't add any parentheses at the ArrayAccess level
-    // The sub-expressions handle their own precedence
+    // Parenthesize Select expressions in the array position
+    // because "a ? b : c[d]" parses as "a ? b : (c[d])" not "(a ? b : c)[d]"
+    if (dynamic_cast<const Select*>(array.get())) {
+        arrayStr = "(" + arrayStr + ")";
+    }
     
     return arrayStr + "[" + indexStr + "]";
 }
@@ -287,10 +290,7 @@ std::string BinOp::toString() const {
      std::string leftStr = left->toString();
      std::string rightStr = right->toString();
      
-     // Parenthesize Select expressions (ternary has lowest precedence)
-     if (dynamic_cast<const Select*>(left.get())) {
-         leftStr = "(" + leftStr + ")";
-     }
+     // Only parenthesize Select on the RIGHT side (to prevent ambiguous parsing)
      if (dynamic_cast<const Select*>(right.get())) {
          rightStr = "(" + rightStr + ")";
      }
@@ -607,7 +607,7 @@ std::shared_ptr<Type> BinOp::check(const Gamma& gamma, const Delta& delta) const
             throw TypeError("non-int type " + leftType->toString() + " for left operand of binary op '" + toString() + "'");
         }
          if (!typeEq(rightType, std::make_shared<IntType>())) {
-            throw TypeError("non-int type " + rightType->toString() + " for right operand of binary op '" + toString() + "'");
+            throw TypeError("right operand of binary op '" + toString() + "' has type " + rightType->toString() + ", should be int");
         }
         return std::make_shared<IntType>();
     }
