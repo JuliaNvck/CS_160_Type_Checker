@@ -26,7 +26,7 @@ std::string FnType::toString() const {
     // ss << ">, " << returnType->toString() << ")";
     ss << "(";
     for (size_t i = 0; i < paramTypes.size(); ++i) {
-        ss << paramTypes[i]->toString() << (i == paramTypes.size() - 1 ? "" : ",");
+        ss << paramTypes[i]->toString() << (i == paramTypes.size() - 1 ? "" : ", ");
     }
     ss << ")";
     ss << " -> " << returnType->toString();
@@ -188,16 +188,15 @@ std::string ArrayAccess::toString() const {
     std::string arrayStr = array->toString();
     std::string indexStr = index->toString();
 
-    // Parenthesize Select expressions in the array position
-    // because "a ? b : c[d]" parses as "a ? b : (c[d])" not "(a ? b : c)[d]"
+    // If array is a Select that's NOT at top-level, add parens
+    // We know we're not at top-level if we're being called from a parent node
+    // But we can't detect that. So we need the parent (e.g., outer Select) to handle it.
+    
+    // Actually, just always add parens if array is Select - the top-level error
+    // message won't have an ArrayAccess wrapping the Select.
     if (dynamic_cast<const Select*>(array.get())) {
         arrayStr = "(" + arrayStr + ")";
     }
-    
-    // Parenthesize Select expressions in the index position
-    // if (dynamic_cast<const Select*>(index.get())) {
-    //     indexStr = "(" + indexStr + ")";
-    // }
     
     // Handle BinOp with Select on right in the index - need to re-render with parens
     if (const BinOp* indexBinOp = dynamic_cast<const BinOp*>(index.get())) {
@@ -232,8 +231,11 @@ std::string ArrayAccess::toString() const {
 std::string FieldAccess::toString() const {
     std::string ptrStr = ptr->toString();
 
-    // Don't add any parentheses at the FieldAccess level
-    // The sub-expressions handle their own precedence
+    // Parenthesize Select in ptr position because field access binds tighter than ?:
+    // "a ? b : c.field" parses as "a ? b : (c.field)" not "(a ? b : c).field"
+    if (dynamic_cast<const Select*>(ptr.get())) {
+        ptrStr = "(" + ptrStr + ")";
+    }
     
     return ptrStr + "." + field;
 }
@@ -260,6 +262,48 @@ std::string UnOp::toString() const {
      } else {
          return opStr + expStr;
      }
+}
+
+std::string NewArray::toString() const {
+    std::string sizeStr = size->toString();
+    
+    // If size is a BinOp with Select on either operand, re-render with parens on Selects
+    if (const BinOp* sizeBinOp = dynamic_cast<const BinOp*>(size.get())) {
+        bool leftIsSelect = dynamic_cast<const Select*>(sizeBinOp->left.get()) != nullptr;
+        bool rightIsSelect = dynamic_cast<const Select*>(sizeBinOp->right.get()) != nullptr;
+        
+        if (leftIsSelect || rightIsSelect) {
+            std::string leftStr = sizeBinOp->left->toString();
+            std::string rightStr = sizeBinOp->right->toString();
+            
+            if (leftIsSelect) {
+                leftStr = "(" + leftStr + ")";
+            }
+            if (rightIsSelect) {
+                rightStr = "(" + rightStr + ")";
+            }
+            
+            std::string opStr;
+            switch(sizeBinOp->op) {
+                case BinaryOp::Add: opStr = "+"; break;
+                case BinaryOp::Sub: opStr = "-"; break;
+                case BinaryOp::Mul: opStr = "*"; break;
+                case BinaryOp::Div: opStr = "/"; break;
+                case BinaryOp::Eq: opStr = "=="; break;
+                case BinaryOp::NotEq: opStr = "!="; break;
+                case BinaryOp::Lt: opStr = "<"; break;
+                case BinaryOp::Lte: opStr = "<="; break;
+                case BinaryOp::Gt: opStr = ">"; break;
+                case BinaryOp::Gte: opStr = ">="; break;
+                case BinaryOp::And: opStr = "and"; break;
+                case BinaryOp::Or: opStr = "or"; break;
+            }
+            
+            sizeStr = leftStr + " " + opStr + " " + rightStr;
+        }
+    }
+    
+    return "[" + type->toString() + "; " + sizeStr + "]";
 }
 
 // std::string UnOp::toString() const {
@@ -322,11 +366,11 @@ std::string BinOp::toString() const {
      std::string leftStr = left->toString();
      std::string rightStr = right->toString();
      
-     // Don't parenthesize Select on right at the top level
-     // Only when this BinOp is nested (handled by the parent)
+     // Don't parenthesize Select operands at the top level
+     // Only when this BinOp is nested in another node (like Select guard or another BinOp)
      
-     // If right is a BinOp that contains a Select on its left, 
-     // we need to ensure that left Select is parenthesized
+     // If right is a BinOp that contains a Select on its operands,
+     // we need to ensure those Selects are parenthesized
      if (const BinOp* rightBinOp = dynamic_cast<const BinOp*>(right.get())) {
          if (dynamic_cast<const Select*>(rightBinOp->left.get()) != nullptr ||
              dynamic_cast<const Select*>(rightBinOp->right.get()) != nullptr) {
@@ -571,18 +615,54 @@ std::shared_ptr<Type> ArrayAccess::check(const Gamma& gamma, const Delta& delta)
     auto arrType = array->check(gamma, delta);
     auto idxType = index->check(gamma, delta);
 
+    // Helper lambda to render top-level ArrayAccess for error messages
+    // Don't parenthesize Select in array position, but DO handle BinOp with Select in index
+    auto renderTopLevel = [this]() -> std::string {
+        std::string topLevelArrayStr = array->toString();
+        std::string topLevelIndexStr = index->toString();
+        
+        // Handle BinOp with Select on right in the index - need to re-render with parens
+        if (const BinOp* indexBinOp = dynamic_cast<const BinOp*>(index.get())) {
+            if (dynamic_cast<const Select*>(indexBinOp->right.get()) != nullptr) {
+                // Re-render the BinOp with the right Select parenthesized
+                std::string leftStr = indexBinOp->left->toString();
+                std::string rightStr = "(" + indexBinOp->right->toString() + ")";
+                
+                std::string opStr;
+                switch(indexBinOp->op) {
+                    case BinaryOp::Add: opStr = "+"; break;
+                    case BinaryOp::Sub: opStr = "-"; break;
+                    case BinaryOp::Mul: opStr = "*"; break;
+                    case BinaryOp::Div: opStr = "/"; break;
+                    case BinaryOp::Eq: opStr = "=="; break;
+                    case BinaryOp::NotEq: opStr = "!="; break;
+                    case BinaryOp::Lt: opStr = "<"; break;
+                    case BinaryOp::Lte: opStr = "<="; break;
+                    case BinaryOp::Gt: opStr = ">"; break;
+                    case BinaryOp::Gte: opStr = ">="; break;
+                    case BinaryOp::And: opStr = "and"; break;
+                    case BinaryOp::Or: opStr = "or"; break;
+                }
+                
+                topLevelIndexStr = leftStr + " " + opStr + " " + rightStr;
+            }
+        }
+        
+        return topLevelArrayStr + "[" + topLevelIndexStr + "]";
+    };
+
     if (!typeEq(idxType, std::make_shared<IntType>())) {
-         throw TypeError("non-int index type " + idxType->toString() + " for array access '" + toString() + "'");
+         throw TypeError("non-int index type " + idxType->toString() + " for array access '" + renderTopLevel() + "'");
     }
 
     if (auto actualArrayType = std::dynamic_pointer_cast<ArrayType>(arrType)) {
         return actualArrayType->elementType;
     }
     if (typeEq(arrType, std::make_shared<NilType>())) {
-         throw TypeError("non-array type " + arrType->toString() + " for array access '" + toString() + "'");
+         throw TypeError("non-array type " + arrType->toString() + " for array access '" + renderTopLevel() + "'");
     }
 
-    throw TypeError("non-array type " + arrType->toString() + " for array access '" + toString() + "'");
+    throw TypeError("non-array type " + arrType->toString() + " for array access '" + renderTopLevel() + "'");
 }
 
 // Γ,∆ ⊢ptr : ptr(struct(id)) ∆(id)(fld) = τ
@@ -641,8 +721,42 @@ std::string Select::toString() const {
     std::string ttStr = tt->toString();
     std::string ffStr = ff->toString();
     
-    // Don't parenthesize BinOp in guard - BinOp has higher precedence than ?:
-    // and will bind naturally
+    // If guard is a BinOp with Select operands, re-render with parens around Selects
+    // This is needed because "a ? b : c and d ? e : f" is ambiguous without parens
+    if (const BinOp* guardBinOp = dynamic_cast<const BinOp*>(guard.get())) {
+        bool leftIsSelect = dynamic_cast<const Select*>(guardBinOp->left.get()) != nullptr;
+        bool rightIsSelect = dynamic_cast<const Select*>(guardBinOp->right.get()) != nullptr;
+        
+        if (leftIsSelect || rightIsSelect) {
+            std::string leftStr = guardBinOp->left->toString();
+            std::string rightStr = guardBinOp->right->toString();
+            
+            if (leftIsSelect) {
+                leftStr = "(" + leftStr + ")";
+            }
+            if (rightIsSelect) {
+                rightStr = "(" + rightStr + ")";
+            }
+            
+            std::string opStr;
+            switch(guardBinOp->op) {
+                case BinaryOp::Add: opStr = "+"; break;
+                case BinaryOp::Sub: opStr = "-"; break;
+                case BinaryOp::Mul: opStr = "*"; break;
+                case BinaryOp::Div: opStr = "/"; break;
+                case BinaryOp::Eq: opStr = "=="; break;
+                case BinaryOp::NotEq: opStr = "!="; break;
+                case BinaryOp::Lt: opStr = "<"; break;
+                case BinaryOp::Lte: opStr = "<="; break;
+                case BinaryOp::Gt: opStr = ">"; break;
+                case BinaryOp::Gte: opStr = ">="; break;
+                case BinaryOp::And: opStr = "and"; break;
+                case BinaryOp::Or: opStr = "or"; break;
+            }
+            
+            guardStr = leftStr + " " + opStr + " " + rightStr;
+        }
+    }
     
     // Parenthesize nested Select expressions in the true/false branches
     if (dynamic_cast<const Select*>(tt.get())) {

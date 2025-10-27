@@ -320,7 +320,7 @@ struct NewArray : public Exp {
     : type(std::move(t)), size(std::move(s)) {}
     void print(std::ostream& os) const override { os << "NewArray(" << type << ", " << size << ")"; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-    std::string toString() const override { return "[" + type->toString() + "; " + size->toString() + "]"; }
+    std::string toString() const override;
 };
 
 struct Deref : public Place {
