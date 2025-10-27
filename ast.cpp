@@ -194,6 +194,38 @@ std::string ArrayAccess::toString() const {
         arrayStr = "(" + arrayStr + ")";
     }
     
+    // Parenthesize Select expressions in the index position
+    // if (dynamic_cast<const Select*>(index.get())) {
+    //     indexStr = "(" + indexStr + ")";
+    // }
+    
+    // Handle BinOp with Select on right in the index - need to re-render with parens
+    if (const BinOp* indexBinOp = dynamic_cast<const BinOp*>(index.get())) {
+        if (dynamic_cast<const Select*>(indexBinOp->right.get()) != nullptr) {
+            // Re-render the BinOp with the right Select parenthesized
+            std::string leftStr = indexBinOp->left->toString();
+            std::string rightStr = "(" + indexBinOp->right->toString() + ")";
+            
+            std::string opStr;
+            switch(indexBinOp->op) {
+                case BinaryOp::Add: opStr = "+"; break;
+                case BinaryOp::Sub: opStr = "-"; break;
+                case BinaryOp::Mul: opStr = "*"; break;
+                case BinaryOp::Div: opStr = "/"; break;
+                case BinaryOp::Eq: opStr = "=="; break;
+                case BinaryOp::NotEq: opStr = "!="; break;
+                case BinaryOp::Lt: opStr = "<"; break;
+                case BinaryOp::Lte: opStr = "<="; break;
+                case BinaryOp::Gt: opStr = ">"; break;
+                case BinaryOp::Gte: opStr = ">="; break;
+                case BinaryOp::And: opStr = "and"; break;
+                case BinaryOp::Or: opStr = "or"; break;
+            }
+            
+            indexStr = leftStr + " " + opStr + " " + rightStr;
+        }
+    }
+    
     return arrayStr + "[" + indexStr + "]";
 }
 
@@ -290,15 +322,14 @@ std::string BinOp::toString() const {
      std::string leftStr = left->toString();
      std::string rightStr = right->toString();
      
-     // Parenthesize Select on the RIGHT side (to prevent ambiguous parsing)
-     if (dynamic_cast<const Select*>(right.get()) != nullptr) {
-         rightStr = "(" + rightStr + ")";
-     }
+     // Don't parenthesize Select on right at the top level
+     // Only when this BinOp is nested (handled by the parent)
      
      // If right is a BinOp that contains a Select on its left, 
      // we need to ensure that left Select is parenthesized
      if (const BinOp* rightBinOp = dynamic_cast<const BinOp*>(right.get())) {
-         if (dynamic_cast<const Select*>(rightBinOp->left.get()) != nullptr) {
+         if (dynamic_cast<const Select*>(rightBinOp->left.get()) != nullptr ||
+             dynamic_cast<const Select*>(rightBinOp->right.get()) != nullptr) {
              // Get the operator string for the right BinOp
              std::string rightOpStr;
              switch(rightBinOp->op) {
@@ -316,11 +347,13 @@ std::string BinOp::toString() const {
                 case BinaryOp::Or: rightOpStr = "or"; break;
              }
              
-             // Re-render with the left Select parenthesized
+             // Re-render with Selects parenthesized
              std::string rightLeftStr = rightBinOp->left->toString();
              std::string rightRightStr = rightBinOp->right->toString();
              
-             rightLeftStr = "(" + rightLeftStr + ")";
+             if (dynamic_cast<const Select*>(rightBinOp->left.get()) != nullptr) {
+                 rightLeftStr = "(" + rightLeftStr + ")";
+             }
              
              if (dynamic_cast<const Select*>(rightBinOp->right.get()) != nullptr) {
                  rightRightStr = "(" + rightRightStr + ")";
@@ -608,11 +641,8 @@ std::string Select::toString() const {
     std::string ttStr = tt->toString();
     std::string ffStr = ff->toString();
     
-    // Parenthesize BinOp in guard to avoid ambiguity
-    // e.g., "a < b ? c : d" when this Select is an operand
-    if (dynamic_cast<const BinOp*>(guard.get())) {
-        guardStr = "(" + guardStr + ")";
-    }
+    // Don't parenthesize BinOp in guard - BinOp has higher precedence than ?:
+    // and will bind naturally
     
     // Parenthesize nested Select expressions in the true/false branches
     if (dynamic_cast<const Select*>(tt.get())) {
