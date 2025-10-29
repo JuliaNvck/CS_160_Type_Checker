@@ -1,1 +1,0 @@
-invalid: right operand of binary op 'qPZ_0 / qPZ_0 ? [int; qPZ_0] : (qPZ_0 ? new [int] : RxhY_1).*' has type [int], should be int

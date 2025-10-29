@@ -1,1 +1,0 @@
-invalid: &[&int] is not a struct pointer type in field access 'hk_9[613338658] ? new [&int] : mozMW_101.f'

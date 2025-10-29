@@ -1,1 +1,0 @@
-invalid: incompatible types int vs [int] in binary op 'Pfqpb_2 == [int; not bv_0[P_4]]'

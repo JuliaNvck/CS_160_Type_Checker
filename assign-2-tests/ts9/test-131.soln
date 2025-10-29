@@ -1,1 +1,0 @@
-invalid: right operand of binary op 'j_2((new &(int) -> int).*(not bJ69iU_0)) >= bJ69iU_0 ? bJ69iU_0 and bJ69iU_0 : VwsLmOV_1[bJ69iU_0] ? new int : Wj' has type &int, should be int

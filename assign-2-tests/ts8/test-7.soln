@@ -1,1 +1,0 @@
-invalid: trying to call type int as function pointer in call 'Q(Q, morgBkRVS([&int; Q]))'

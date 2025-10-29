@@ -1,1 +1,0 @@
-invalid: invalid type GhrntAr used in binary op '(new GhrntAr).* != (new GhrntAr).*'

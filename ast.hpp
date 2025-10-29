@@ -23,6 +23,7 @@ struct StructDef;
 struct FunctionDef;
 struct Extern;
 
+
 // Type Representation
 // Defines the structure of types in Cflat (int, struct, ptr, etc.)
 
@@ -71,7 +72,8 @@ struct NilType : Type {
 struct StructType : Type {
     std::string name;
     StructType(std::string n) : name(std::move(n)) {}
-    std::string toString() const override { return name ; }
+    //std::string toString() const override { return "Struct(" + name + ")"; }
+    std::string toString() const override { return name; }
     bool equals(const Type& other) const override;
     // bool equals(const Type& other) const override {
     //     // nil is not eq to struct types
@@ -199,11 +201,20 @@ inline std::ostream& operator<<(std::ostream& os, const Node& node) {
     return os;
 }
 inline std::ostream& operator<<(std::ostream& os, const std::unique_ptr<Node>& node) {
+    //doesn't bind with unique_ptr<Place> or unique_ptr<Exp> 
     if (node) node->print(os); else os << "<null>";
     return os;
 }
 inline std::ostream& operator<<(std::ostream& os, const std::shared_ptr<Type>& type) {
     if (type) type->print(os); else os << "<null>";
+    return os;
+}
+
+template <class T,
+          class = std::enable_if_t<std::is_base_of_v<Node, T>>>
+inline std::ostream& operator<<(std::ostream& os,
+                                const std::unique_ptr<T>& p) {
+    if (p) p->print(os); else os << "<null>";
     return os;
 }
 
@@ -247,17 +258,17 @@ struct Id : public Place {
     explicit Id(std::string n) : name(std::move(n)) {}
     void print(std::ostream& os) const override { os << "Id(\"" << name << "\")"; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-    std::string toString() const override { return name; }
+    std::string toString() const override { return "Id(\"" + name + "\")"; }
 };
 
 // Val wraps a Place when used as an expression
 struct Val : public Exp {
     std::unique_ptr<Place> place;
     explicit Val(std::unique_ptr<Place> p) : place(std::move(p)) {}
-    void print(std::ostream& os) const override { os << "Val(" << place << ")"; }
+    void print(std::ostream& os) const override { os << "Val(" << *place << ")"; }
     // Check delegates to the Place's check
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override { return place->check(gamma, delta); }
-     std::string toString() const override { return place->toString(); }
+     std::string toString() const override { return "Val(" + place->toString() + ")";}
 };
 
 struct Num : public Exp {
@@ -265,7 +276,7 @@ struct Num : public Exp {
     explicit Num(long long val) : value(val) {}
     void print(std::ostream& os) const override { os << "Num(" << value << ")"; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-     std::string toString() const override { return std::to_string(value); }
+     std::string toString() const override { return "Num(" + std::to_string(value) + ")"; }
 };
 
 struct NilExp : public Exp {
@@ -308,9 +319,11 @@ struct BinOp : public Exp {
 struct NewSingle : public Exp {
     std::shared_ptr<Type> type;
     explicit NewSingle(std::shared_ptr<Type> t) : type(std::move(t)) {}
-    void print(std::ostream& os) const override { os << "new " << type; }
+    //void print(std::ostream& os) const override { os << "NewSingle(" << type << ")"; }
+    void print(std::ostream& os) const override;
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
-    std::string toString() const override { return "new " + type->toString(); }
+    //std::string toString() const override { return "new " + type->toString(); }
+    std::string toString() const override;
 };
 
 struct NewArray : public Exp {
@@ -318,7 +331,8 @@ struct NewArray : public Exp {
     std::unique_ptr<Exp> size;
     NewArray(std::shared_ptr<Type> t, std::unique_ptr<Exp> s)
     : type(std::move(t)), size(std::move(s)) {}
-    void print(std::ostream& os) const override { os << "NewArray(" << type << ", " << size << ")"; }
+    //void print(std::ostream& os) const override { os << "NewArray(" << type << ", " << size << ")"; }
+    void print(std::ostream& os) const override;
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override;
     std::string toString() const override;
 };
@@ -368,7 +382,7 @@ struct CallExp : public Exp {
     explicit CallExp(std::unique_ptr<FunCall> fc) : fun_call(std::move(fc)) {}
     void print(std::ostream& os) const override { os << "Call(" << fun_call << ")"; }
     std::shared_ptr<Type> check(const Gamma& gamma, const Delta& delta) const override { return fun_call->check(gamma, delta); }
-    std::string toString() const override { return fun_call->toString(); }
+    std::string toString() const override { return "Call(" + fun_call->toString() + ")"; }
 };
 
 // Statement nodes

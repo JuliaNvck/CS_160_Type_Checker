@@ -1,1 +1,0 @@
-invalid: right operand of binary op 'mp_2.*.* < (new &int).*' has type &int, should be int

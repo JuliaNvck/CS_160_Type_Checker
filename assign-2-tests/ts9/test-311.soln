@@ -1,1 +1,0 @@
-invalid: non-pointer type [int] for dereference '((dC_0 ? m8__1 : m8__1)[dC_0]).*.*'
