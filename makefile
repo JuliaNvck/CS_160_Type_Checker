@@ -2,8 +2,8 @@ CXX = g++
 # Use C++17 standard for features like std::optional
 CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-unused-parameter -pedantic -g
 # Add AddressSanitizer flags
-CXXFLAGS += -fsanitize=address
-LDFLAGS = -fsanitize=address
+# CXXFLAGS += -fsanitize=address
+# LDFLAGS = -fsanitize=address
 
 # Name of the final executable
 TARGET = type
